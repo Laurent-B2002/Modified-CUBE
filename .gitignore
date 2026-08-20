@@ -258,6 +258,7 @@ MultimodalEEGCOlourDecoding.ipynb
 chance_f1_results/
 assets/
 configs/meg.yaml
+preprocess/
 
 #code for verifications
 stimuli_images.py
@@ -265,7 +266,7 @@ data_shape.py
 time_series.py
 test2.py
 svm_colour_baseline.py
-colour_vector_check.py
+# colour_vector_check.py
 colour_vectors.py
 check_order.py
 actual_values.py
