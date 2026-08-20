@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import numpy as np
 import torch
 from PIL import Image
@@ -7,68 +6,41 @@ from tqdm import tqdm
 import open_clip
 
 
-ROOT = Path("pilot2_whiten_foveated")
+ROOT = Path("pilot_whiten_foveated")
 
 CUBE_DATA_DIR = ROOT / "cube_ready" / "sub-01"
 STIMULI_ROOT = ROOT / "stimuli"
 FEATURE_DIR = ROOT / "features"
 
-FEATURE_DIR.mkdir(
-    parents=True,
-    exist_ok=True
-)
+FEATURE_DIR.mkdir(parents=True, exist_ok=True)
 
 DEVICE = (
     "cuda"
     if torch.cuda.is_available()
-    else "cpu"
-)
+    else "cpu")
 
 MODEL_NAME = "RN50"
 PRETRAINED = "openai"
 
-
+#flatten the CUBE img/text array and return unique string keys
 def flatten_unique(arr):
-    """
-    Flatten the CUBE img/text array and return
-    unique string keys.
-    """
     arr = np.asarray(arr).reshape(-1)
 
-    return sorted(
-        set(map(str, arr))
-    )
+    return sorted(set(map(str, arr)))
 
-
+#convert a stimulus key into its location in the stimuli directory.
 def image_path_from_key(img_key):
-    """
-    Convert a CUBE stimulus key such as
-
-        /03_colours/example.png
-
-    into its location in the stimuli directory.
-    """
     return STIMULI_ROOT / img_key.lstrip("/")
 
 @torch.no_grad()
-def encode_images(
-    img_keys,
-    model,
-    preprocess,
-    batch_size=8
-):
-    model.eval()
+def encode_images(img_keys, model, preprocess, batch_size=8):
 
+    model.eval()
     img_features = {}
 
-    for i in tqdm(
-        range(0, len(img_keys), batch_size),
-        desc="Encoding test images"
-    ):
+    for i in tqdm(range(0, len(img_keys), batch_size), desc="Encoding test images"):
 
-        batch_keys = img_keys[
-            i:i + batch_size
-        ]
+        batch_keys = img_keys[i:i + batch_size]
 
         images = []
         valid_keys = []
@@ -79,41 +51,22 @@ def encode_images(
 
             if not img_path.exists():
                 raise FileNotFoundError(
-                    f"Missing stimulus image: {img_path}"
-                )
+                    f"Missing stimulus image: {img_path}")
 
-            img = Image.open(
-                img_path
-            ).convert("RGB")
+            img = Image.open(img_path).convert("RGB")
 
-            images.append(
-                preprocess(img)
-            )
+            images.append(preprocess(img))
 
             valid_keys.append(key)
 
-        image_tensor = torch.stack(
-            images
-        ).to(DEVICE)
+        image_tensor = torch.stack(images).to(DEVICE)
 
-        feats = model.encode_image(
-            image_tensor
-        )
+        feats = model.encode_image(image_tensor)
 
-        feats = feats / feats.norm(
-            dim=-1,
-            keepdim=True
-        )
+        feats = feats / feats.norm(dim=-1, keepdim=True)
 
-        for key, feat in zip(
-            valid_keys,
-            feats
-        ):
-            img_features[key] = (
-                feat.detach()
-                .cpu()
-                .float()
-            )
+        for key, feat in zip(valid_keys, feats):
+            img_features[key] = (feat.detach().cpu().float())
 
         del image_tensor
         del feats
@@ -125,51 +78,25 @@ def encode_images(
 
 
 @torch.no_grad()
-def encode_texts(
-    text_keys,
-    model,
-    batch_size=128
-):
+def encode_texts(text_keys, model, batch_size=128):
     model.eval()
 
-    device = next(
-        model.parameters()
-    ).device
+    device = next(model.parameters()).device
 
     text_features = {}
 
-    for i in tqdm(
-        range(0, len(text_keys), batch_size),
-        desc="Encoding test texts"
-    ):
+    for i in tqdm(range(0, len(text_keys), batch_size), desc="Encoding test texts"):
 
-        batch_texts = text_keys[
-            i:i + batch_size
-        ]
+        batch_texts = text_keys[i:i + batch_size]
 
-        tokens = open_clip.tokenize(
-            [
-                f"This is a {text}."
-                for text in batch_texts
-            ]
-        ).to(device)
+        tokens = open_clip.tokenize([f"This is a {text}." for text in batch_texts]).to(device)
 
         feats = model.encode_text(tokens)
 
-        feats = feats / feats.norm(
-            dim=-1,
-            keepdim=True
-        )
+        feats = feats / feats.norm(dim=-1, keepdim=True)
 
-        for key, feat in zip(
-            batch_texts,
-            feats
-        ):
-            text_features[key] = (
-                feat.detach()
-                .cpu()
-                .float()
-            )
+        for key, feat in zip(batch_texts, feats):
+            text_features[key] = (feat.detach().cpu().float())
 
         del tokens
         del feats
@@ -182,27 +109,16 @@ def encode_texts(
 
 def build_test_features():
 
-    test_pt_path = (
-        CUBE_DATA_DIR / "test.pt"
-    )
+    test_pt_path = (CUBE_DATA_DIR / "test.pt")
 
     if not test_pt_path.exists():
-        raise FileNotFoundError(
-            f"Test file not found: {test_pt_path}"
-        )
+        raise FileNotFoundError(f"Test file not found: {test_pt_path}")
 
-    data = torch.load(
-        test_pt_path,
-        weights_only=False
-    )
+    data = torch.load(test_pt_path, weights_only=False)
 
-    img_keys = flatten_unique(
-        data["img"]
-    )
+    img_keys = flatten_unique(data["img"])
 
-    text_keys = flatten_unique(
-        data["text"]
-    )
+    text_keys = flatten_unique(data["text"])
 
     print("\n========================================")
     print("TRUE TEST FEATURE EXTRACTION")
@@ -215,31 +131,16 @@ def build_test_features():
 
 
 
-    model, _, preprocess = (
-        open_clip.create_model_and_transforms(
-            MODEL_NAME,
-            pretrained=PRETRAINED,
-            device=DEVICE,
-        )
-    )
+    model, _, preprocess = (open_clip.create_model_and_transforms(MODEL_NAME, pretrained=PRETRAINED, device=DEVICE,))
 
 
-    img_features = encode_images(
-        img_keys,
-        model,
-        preprocess
-    )
+    img_features = encode_images(img_keys, model, preprocess)
 
-    text_features = encode_texts(
-        text_keys,
-        model
-    )
+    text_features = encode_texts(text_keys, model)
 
 
 
-    out_path = (
-        FEATURE_DIR / "test.pt"
-    )
+    out_path = (FEATURE_DIR / "test.pt")
 
     torch.save(
         {
@@ -249,31 +150,18 @@ def build_test_features():
         out_path,
     )
 
-    saved = torch.load(
-        out_path,
-        weights_only=False
-    )
+    saved = torch.load(out_path, weights_only=False)
 
     print("\nSaved:", out_path)
 
-    print(
-        "Saved image features:",
-        len(saved["img_features"])
-    )
+    print("Saved image features:", len(saved["img_features"]))
 
-    print(
-        "Saved text features:",
-        len(saved["text_features"])
-    )
+    print("Saved text features:", len(saved["text_features"]))
 
 
-    assert set(img_keys) == set(
-        saved["img_features"].keys()
-    )
+    assert set(img_keys) == set(saved["img_features"].keys())
 
-    assert set(text_keys) == set(
-        saved["text_features"].keys()
-    )
+    assert set(text_keys) == set(saved["text_features"].keys())
 
     print("\nAll test feature checks passed.")
 

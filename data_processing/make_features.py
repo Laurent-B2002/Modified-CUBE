@@ -9,9 +9,9 @@ from torchvision import transforms
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-CUBE_DATA_DIR = Path("pilot2_whiten_foveated/cube_ready/sub-01")
-STIMULI_ROOT = Path("pilot2_whiten_foveated/stimuli")
-FEATURE_DIR = Path("pilot2_whiten_foveated/features")
+CUBE_DATA_DIR = Path("pilot_whiten_foveated/cube_ready/sub-01")
+STIMULI_ROOT = Path("pilot_whiten_foveated/stimuli")
+FEATURE_DIR = Path("pilot_whiten_foveated/features")
 FEATURE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -73,9 +73,7 @@ def encode_texts(text_keys, model, batch_size=128):
     for i in tqdm(range(0, len(text_keys), batch_size), desc="Encoding texts"):
         batch_texts = text_keys[i:i + batch_size]
 
-        tokens = open_clip.tokenize(
-            [f"This is a {t}." for t in batch_texts]
-        ).to(device)
+        tokens = open_clip.tokenize([f"This is a {t}." for t in batch_texts]).to(device)
 
         feats = model.encode_text(tokens)
         feats = feats / feats.norm(dim=-1, keepdim=True)
@@ -100,11 +98,7 @@ def build_features_for_split(split_name):
     print("Unique images:", len(img_keys))
     print("Unique texts:", len(text_keys))
 
-    model, _, preprocess = open_clip.create_model_and_transforms(
-        MODEL_NAME,
-        pretrained=PRETRAINED,
-        device=DEVICE,
-    )
+    model, _, preprocess = open_clip.create_model_and_transforms(MODEL_NAME, pretrained=PRETRAINED, device=DEVICE,)
 
     img_features = encode_images(img_keys, model, preprocess)
     text_features = encode_texts(text_keys, model)

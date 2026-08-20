@@ -263,7 +263,6 @@ preprocess/
 stimuli_images.py
 data_shape.py
 time_series.py
-test2.py
 svm_colour_baseline.py
 baseline_f1.py
 
@@ -282,7 +281,6 @@ visible_gt.py
 violin_plot.py
 validation_f1_violin_plot.png
 validation_f1_by_stimulus_type.png
-test_result_heatmap.py
 test_language_ground_truth_heatmap.png
 test_language_predictions_participant2.png
 test_language_predictions_participant1.png

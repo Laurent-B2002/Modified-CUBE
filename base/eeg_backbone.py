@@ -196,19 +196,7 @@ class TSconv(BaseModel):
 
 
 class EEGConvProjectLayerColour(nn.Module):
-    def __init__(
-        self,
-        z_dim,
-        c_num,
-        timesteps,
-        drop_proj=0.3,
-        f1=16,
-        f2=32,
-        f3=64,
-        k1=25,
-        k2=15,
-        colour_hidden_dims=(512, 256),
-    ):
+    def __init__(self, z_dim, c_num, timesteps, drop_proj=0.3, f1=16, f2=32, f3=64, k1=25, k2=15, colour_hidden_dims=(512, 256)):
         super().__init__()
 
         self.z_dim = z_dim

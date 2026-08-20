@@ -3,9 +3,9 @@ import numpy as np
 import torch
 
 
-SPLIT_DIR = Path("pilot2_whiten_foveated/splits")
-OUT_DIR = Path("pilot2_whiten_foveated/cube_ready/sub-01")
-COLOUR_DIR = Path("pilot2_whiten_foveated/colour_annotations")
+SPLIT_DIR = Path("pilot_whiten_foveated/splits")
+OUT_DIR = Path("pilot_whiten_foveated/cube_ready/sub-01")
+COLOUR_DIR = Path("pilot_whiten_foveated/colour_annotations")
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 COLOUR_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,14 +42,14 @@ def save_cube_pt(path, eeg, stimuli, times):
     eeg = eeg.astype(np.float32)
 
     if eeg.ndim == 3:
-        eeg = eeg[:, None, :, :]          # (N, 1, C, T)
-        labels = labels[:, None]          # (N, 1)
+        eeg = eeg[:, None, :, :]
+        labels = labels[:, None]
         stimuli = np.array(stimuli)[:, None]
         text = np.array([stimulus_to_text(s) for s in stimuli[:, 0]])[:, None]
         session = np.zeros((eeg.shape[0], 1), dtype=np.int64)
 
     elif eeg.ndim == 4:
-        # For true test data like (20, 77, 64, 250)
+        #for true test data like (20, 77, 64, 250)
         n_items, n_repeats = eeg.shape[:2]
 
         labels = labels[:, None].repeat(n_repeats, axis=1)
@@ -90,19 +90,9 @@ times = raw_train["times"]
 
 
 #cube style eeg files
-train_label_map = save_cube_pt(
-    OUT_DIR / "train.pt",
-    eeg_train,
-    stimuli_train,
-    times,
-)
+train_label_map = save_cube_pt(OUT_DIR / "train.pt", eeg_train, stimuli_train, times)
 
-val_label_map = save_cube_pt(
-    OUT_DIR / "test.pt",
-    eeg_val,
-    stimuli_val,
-    times,
-)
+val_label_map = save_cube_pt( OUT_DIR / "test.pt", eeg_val, stimuli_val, times)
 
 
 #cube style colour files

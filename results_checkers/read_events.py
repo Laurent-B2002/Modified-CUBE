@@ -2,7 +2,7 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Load TensorBoard event file
+#load tensorboard event file
 event_path = ("exp_colour_pilot_whiten_foveated\pilot2_final\sub-01_seed0\events.out.tfevents.1787057933.DESKTOP-FDD8AS8.4340.0")
 
 ea = EventAccumulator(event_path)
@@ -15,7 +15,7 @@ def get_scalar(tag):
     values = [e.value for e in events]
     return steps, values
 
-# Get logged metrics
+#get logged metrics
 train_steps, train_colour = get_scalar("colour_loss")
 val_steps, val_colour = get_scalar("val_colour_loss")
 val_f1_steps, val_f1 = get_scalar("val_f1_colour")
@@ -42,8 +42,8 @@ val_kl_epochs = np.arange(1, len(val_kl) + 1)
 # train_cosine_epochs = np.arange(1, len(train_cosine) + 1)
 # val_cosine_epochs = np.arange(1, len(val_cosine) + 1)
 
-# Plot 1:
-# Combined colour loss + validation F1
+#plot 1:
+#combined colour loss + validation F1
 
 fig, loss_axis = plt.subplots(figsize=(9, 5))
 
@@ -55,7 +55,7 @@ loss_axis.set_xlabel("Epoch")
 loss_axis.set_ylabel("Colour loss")
 
 
-# Second y-axis for F1
+#second y-axis for F1
 f1_axis = loss_axis.twinx()
 
 f1_axis.plot(val_f1_epochs, val_f1, linestyle="--", label="Validation colour F1",)
@@ -63,7 +63,7 @@ f1_axis.plot(val_f1_epochs, val_f1, linestyle="--", label="Validation colour F1"
 f1_axis.set_ylabel("Validation F1")
 
 
-# Combined legend
+#combined legend
 loss_lines, loss_labels = (loss_axis.get_legend_handles_labels())
 
 f1_lines, f1_labels = (f1_axis.get_legend_handles_labels())
@@ -75,8 +75,8 @@ plt.title("Colour loss and validation F1 over training")
 fig.tight_layout()
 plt.show()
 
-# Plot 2:
-# BCE loss
+#plot 2:
+#BCE loss
 
 plt.figure(figsize=(9, 5))
 
@@ -93,8 +93,8 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Plot 3:
-# KL divergence loss
+#plot 3:
+#KL divergence loss
 plt.figure(figsize=(9, 5))
 
 plt.plot(train_kl_epochs, train_kl, label="Train KL loss",)
@@ -110,8 +110,8 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Plot 4:
-# cosine loss
+#plot 4:
+#cosine loss
 # plt.figure(figsize=(9, 5))
 
 # plt.plot(train_cosine_epochs, train_cosine, label="Train cosine loss",)
@@ -127,8 +127,8 @@ plt.show()
 # plt.tight_layout()
 # plt.show()
 
-# Plot 5:
-# Actual BCE and weighted-KL contributions
+#plot 5:
+#actual BCE and weighted-KL contributions
 #colour_loss = BCE + 0.1 * KL
 
 lambda_kl = 0.1
@@ -156,8 +156,8 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Plot 6:
-# Actual BCE and weighted-cosine contributions
+#plot 6:
+#actual BCE and weighted-cosine contributions
 # colour_loss = BCE + 0.25 * cos
 
 # lambda_cosine = 0.125
@@ -186,7 +186,7 @@ plt.show()
 # plt.show()
 
 
-# Best epochs
+#best epochs
 
 min_loss_index = int(np.argmin(val_colour))
 
@@ -201,7 +201,7 @@ print("Best validation-F1 epoch:", val_f1_epochs[max_f1_index])
 print("Best validation F1:", val_f1[max_f1_index])
 
 
-# Final component losses
+#final component losses
 
 print("\nFinal losses:")
 

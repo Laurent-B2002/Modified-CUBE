@@ -3,12 +3,12 @@ from PIL import Image
 import numpy as np
 import time
 
-STIM_ROOT = Path("pilot2/stimuli")
-GT_ROOT = Path("pilot2/gts")
+STIM_ROOT = Path("pilot_whiten_foveated/stimuli")
+GT_ROOT = Path("pilot_whiten_foveated/gts")
 
 
-new_train = np.load("pilot2/raw/eeg_train_float16.npy", allow_pickle=True)[()]
-new_test = np.load("pilot2/raw/eeg_test_float16.npy", allow_pickle=True)[()]
+new_train = np.load("pilot_whiten_foveated/raw/eeg_train_float16.npy", allow_pickle=True)[()]
+new_test = np.load("pilot_whiten_foveated/raw/eeg_test_float16.npy", allow_pickle=True)[()]
 
 
 missing = []
@@ -45,8 +45,8 @@ def rgb_to_palette_indices(image, colours):
     return indices.reshape(h, w).astype(np.uint8)
 
 
-# `missing` should be your list of missing GT stimulus paths
-# e.g. ['/03_colours/stimuli__0000001.png', ...]
+#`missing` should be your list of missing GT stimulus paths
+#e.g. ['/03_colours/stimuli__0000001.png', ...]
 
 created = 0
 skipped = 0
@@ -71,8 +71,8 @@ for stim in sorted(set(missing)):
 
     label_map = rgb_to_palette_indices(arr, COLOURS)
 
-    # Save as RGB index map, matching your existing GT format:
-    # index value is repeated across R,G,B channels.
+    #save as RGB index map, matching your existing GT format:
+    #index value is repeated across R,G,B channels.
     gt_rgb = np.repeat(label_map[:, :, None], 3, axis=2).astype(np.uint8)
 
     Image.fromarray(gt_rgb).save(gt_path)

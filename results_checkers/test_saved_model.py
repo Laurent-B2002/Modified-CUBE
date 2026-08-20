@@ -15,15 +15,13 @@ def main():
         "--run_dir",
         type=str,
         required=True,
-        help="Directory containing run_args.json and checkpoints/",
-    )
+        help="Directory containing run_args.json and checkpoints/")
 
     parser.add_argument(
         "--checkpoint",
         type=str,
         required=True,
-        help="Path to the saved best-f1 checkpoint",
-    )
+        help="Path to the saved best-f1 checkpoint")
 
     args = parser.parse_args()
 
@@ -81,17 +79,14 @@ def main():
     )
 
 
-    # Load datasets
+    #load datasets
     train_loader, _, test_loader = load_dataset(config)
 
     print("\nTrain samples:", len(train_loader.dataset))
     print("TRUE TEST samples:", len(test_loader.dataset))
 
 
-    pl_model = load_model(
-        config,
-        train_loader
-    )
+    pl_model = load_model(config, train_loader)
 
 
     #test only

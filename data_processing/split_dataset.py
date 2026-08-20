@@ -4,9 +4,9 @@ from sklearn.model_selection import train_test_split
 
 
 #paths
-RAW_DIR = Path("pilot2_whiten_foveated/raw")
-COLOUR_VECTOR_DIR = Path("pilot2_whiten_foveated/colour_vectors")
-SPLIT_DIR = Path("pilot2_whiten_foveated/splits")
+RAW_DIR = Path("pilot_whiten_foveated/raw")
+COLOUR_VECTOR_DIR = Path("pilot_whiten_foveated/colour_vectors")
+SPLIT_DIR = Path("pilot_whiten_foveated/splits")
 SPLIT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -25,13 +25,9 @@ pilot_data["test"] = np.load(
 
 
 #load colour vectors
-colour_gt_train = np.load(
-    COLOUR_VECTOR_DIR / "colour_gt_train.npy"
-)
+colour_gt_train = np.load(COLOUR_VECTOR_DIR / "colour_gt_train.npy")
 
-colour_gt_test = np.load(
-    COLOUR_VECTOR_DIR / "colour_gt_test.npy"
-)
+colour_gt_test = np.load(COLOUR_VECTOR_DIR / "colour_gt_test.npy")
 
 
 #validation
@@ -63,18 +59,7 @@ print("Test colour GT:", colour_gt_test.shape)
 print("Test stimuli:", test_stimuli.shape)
 
 
-#if repetitions needs to be averaged
-test_eeg = test_eeg_raw #.mean(axis=1)
-
-# assert test_eeg.shape[0] == colour_gt_test.shape[0], (
-#     test_eeg.shape,
-#     colour_gt_test.shape
-# )
-
-# assert test_eeg.shape[0] == test_stimuli.shape[0], (
-#     test_eeg.shape,
-#     test_stimuli.shape
-# )
+test_eeg = test_eeg_raw
 
 print("unmodified test EEG:", test_eeg.shape)
 

@@ -2,12 +2,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-
-# ============================================================
-# CONFIG
-# ============================================================
-
-ROOT = Path("pilot2_whiten_foveated")
+ROOT = Path("pilot_whiten_foveated")
 
 SPLIT_DIR = ROOT / "splits"
 OUT_DIR = ROOT / "cube_ready" / "sub-01"
@@ -15,8 +10,6 @@ COLOUR_DIR = ROOT / "colour_annotations"
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 COLOUR_DIR.mkdir(parents=True, exist_ok=True)
-
-
 
 def stimulus_to_text(stimulus):
     return Path(str(stimulus)).stem
@@ -27,13 +20,11 @@ def make_labels(stimuli):
 
     label_map = {
         stimulus: i
-        for i, stimulus in enumerate(unique)
-    }
+        for i, stimulus in enumerate(unique)}
 
     labels = np.array(
         [label_map[str(s)] for s in stimuli],
-        dtype=np.int64
-    )
+        dtype=np.int64)
 
     return labels, label_map
 
@@ -61,11 +52,11 @@ def save_cube_pt(path, eeg, stimuli, times):
 
     if eeg.ndim == 3:
 
-        eeg = eeg[:, None, :, :]          # (N, 1, C, T)
+        eeg = eeg[:, None, :, :]
 
-        labels = labels[:, None]          # (N, 1)
+        labels = labels[:, None]
 
-        stimuli = stimuli[:, None]        # (N, 1)
+        stimuli = stimuli[:, None]
 
         text = np.array([
             stimulus_to_text(s)
@@ -81,33 +72,19 @@ def save_cube_pt(path, eeg, stimuli, times):
 
         n_items, n_repeats = eeg.shape[:2]
 
-        labels = labels[:, None].repeat(
-            n_repeats,
-            axis=1
-        )
+        labels = labels[:, None].repeat(n_repeats, axis=1)
 
-        stimuli = stimuli[:, None].repeat(
-            n_repeats,
-            axis=1
-        )
+        stimuli = stimuli[:, None].repeat(n_repeats, axis=1)
 
         text = np.array([
             stimulus_to_text(s)
             for s in stimuli[:, 0]
-        ])[:, None].repeat(
-            n_repeats,
-            axis=1
-        )
+        ])[:, None].repeat(n_repeats, axis=1)
 
-        session = np.zeros(
-            (n_items, n_repeats),
-            dtype=np.int64
-        )
+        session = np.zeros((n_items, n_repeats), dtype=np.int64)
 
     else:
-        raise ValueError(
-            f"Unexpected EEG shape: {eeg.shape}"
-        )
+        raise ValueError(f"Unexpected EEG shape: {eeg.shape}")
 
     payload = {
         "eeg": eeg,
@@ -123,18 +100,11 @@ def save_cube_pt(path, eeg, stimuli, times):
     return label_map
 
 
-eeg_test = np.load(
-    SPLIT_DIR / "eeg_test.npy"
-)
+eeg_test = np.load(SPLIT_DIR / "eeg_test.npy")
 
-colour_test = np.load(
-    SPLIT_DIR / "colour_test.npy"
-)
+colour_test = np.load(SPLIT_DIR / "colour_test.npy")
 
-stimuli_test = np.load(
-    SPLIT_DIR / "stimuli_test.npy",
-    allow_pickle=True
-)
+stimuli_test = np.load(SPLIT_DIR / "stimuli_test.npy", allow_pickle=True)
 
 
 print("Loaded true test split:")
@@ -145,34 +115,26 @@ print("Stimuli:", stimuli_test.shape)
 
 assert len(eeg_test) == len(stimuli_test), (
     f"EEG/stimulus mismatch: "
-    f"{len(eeg_test)} vs {len(stimuli_test)}"
-)
+    f"{len(eeg_test)} vs {len(stimuli_test)}")
 
 assert len(colour_test) == len(stimuli_test), (
     f"Colour/stimulus mismatch: "
-    f"{len(colour_test)} vs {len(stimuli_test)}"
-)
+    f"{len(colour_test)} vs {len(stimuli_test)}")
 
 assert colour_test.ndim == 2, (
-    f"Expected colour_test to be 2-D, got {colour_test.shape}"
-)
+    f"Expected colour_test to be 2-D, got {colour_test.shape}")
 
 assert colour_test.shape[1] == 13, (
-    f"Expected 13 colour channels, got {colour_test.shape}"
-)
+    f"Expected 13 colour channels, got {colour_test.shape}")
 
 
 train_pt_path = OUT_DIR / "train.pt"
 
 if not train_pt_path.exists():
     raise FileNotFoundError(
-        f"Existing train.pt not found: {train_pt_path}"
-    )
+        f"Existing train.pt not found: {train_pt_path}")
 
-train_pt = torch.load(
-    train_pt_path,
-    weights_only=False
-)
+train_pt = torch.load(train_pt_path, weights_only=False)
 
 times = train_pt["times"]
 
@@ -180,41 +142,21 @@ print("\nUsing times from:")
 print(train_pt_path)
 
 
-test_label_map = save_cube_pt(
-    OUT_DIR / "test.pt",
-    eeg_test,
-    stimuli_test,
-    times,
-)
+test_label_map = save_cube_pt(OUT_DIR / "test.pt", eeg_test, stimuli_test, times,)
 
 
-colour_test_dict = make_colour_dict(
-    stimuli_test,
-    colour_test
-)
+colour_test_dict = make_colour_dict(stimuli_test, colour_test)
 
-np.save(
-    COLOUR_DIR / "test.npy",
-    colour_test_dict
-)
+np.save(COLOUR_DIR / "test.npy", colour_test_dict)
 
 
-# Optional reference file
-np.save(
-    OUT_DIR / "test_label_map.npy",
-    test_label_map
-)
+#optional reference file
+np.save(OUT_DIR / "test_label_map.npy", test_label_map)
 
 
-test_pt = torch.load(
-    OUT_DIR / "test.pt",
-    weights_only=False
-)
+test_pt = torch.load(OUT_DIR / "test.pt", weights_only=False)
 
-saved_colour_dict = np.load(
-    COLOUR_DIR / "test.npy",
-    allow_pickle=True
-)[()]
+saved_colour_dict = np.load(COLOUR_DIR / "test.npy", allow_pickle=True)[()]
 
 
 print("\n========================================")
@@ -259,8 +201,6 @@ print("\nColour vector shape:")
 print(saved_colour_dict[first_img].shape)
 
 
-assert first_img in saved_colour_dict, (
-    f"{first_img} not found in colour annotation dictionary"
-)
+assert first_img in saved_colour_dict, (f"{first_img} not found in colour annotation dictionary")
 
 print("\nAll test-set checks passed.")

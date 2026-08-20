@@ -28,29 +28,17 @@ COLOUR_RGB = [
 bar_colours = np.array(COLOUR_RGB) / 255
 
 
-colour_train = np.load(
-    "pilot2/splits/colour_train.npy"
-)
+colour_train = np.load("pilot2/splits/colour_train.npy")
 
-stimuli_train = np.load(
-    "pilot2/splits/stimuli_train.npy",
-    allow_pickle=True
-)
+stimuli_train = np.load("pilot2/splits/stimuli_train.npy", allow_pickle=True)
 
-eeg_train = np.load(
-    "pilot2/splits/eeg_train.npy",
-    allow_pickle=True
-)
+eeg_train = np.load("pilot2/splits/eeg_train.npy", allow_pickle=True)
 
 stim_root = Path("pilot2/stimuli")
 
 n_examples = 10
 
-fig, axes = plt.subplots(
-    n_examples,
-    2,
-    figsize=(12, 3*n_examples)
-)
+fig, axes = plt.subplots(n_examples, 2, figsize=(12, 3*n_examples))
 
 for i in range(n_examples):
 
@@ -81,10 +69,6 @@ for i in range(n_examples):
     )
     axes[i,1].set_ylabel("Probability")
 
-# plt.tight_layout()
-# plt.show()
-
-
 print(colour_train.shape)
 
 print("Mean target:")
@@ -95,10 +79,7 @@ print()
 print("Std target:")
 print(np.round(colour_train.std(axis=0), 4))
 
-unique = np.unique(
-    np.round(colour_train, 4),
-    axis=0
-)
+unique = np.unique(np.round(colour_train, 4), axis=0)
 
 print("Unique colour vectors:", len(unique))
 

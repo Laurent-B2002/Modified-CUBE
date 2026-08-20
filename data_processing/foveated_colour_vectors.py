@@ -4,9 +4,9 @@ from PIL import Image
 
 
 #paths
-RAW_DIR = Path("pilot2_whiten_foveated/raw")
-GT_ROOT = Path("pilot2_whiten_foveated/gts")
-OUT_DIR = Path("pilot2_whiten_foveated/colour_vectors")
+RAW_DIR = Path("pilot_whiten_foveated/raw")
+GT_ROOT = Path("pilot_whiten_foveated/gts")
+OUT_DIR = Path("pilot_whiten_foveated/colour_vectors")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -31,15 +31,9 @@ COLOURS = [
 #load data
 pilot_data = {}
 
-pilot_data["train"] = np.load(
-    RAW_DIR / "eeg_train_float16.npy",
-    allow_pickle=True
-)[()]
+pilot_data["train"] = np.load(RAW_DIR / "eeg_train_float16.npy", allow_pickle=True)[()]
 
-pilot_data["test"] = np.load(
-    RAW_DIR / "eeg_test_float16.npy",
-    allow_pickle=True
-)[()]
+pilot_data["test"] = np.load(RAW_DIR / "eeg_test_float16.npy", allow_pickle=True)[()]
 
 
 #map path
@@ -66,8 +60,7 @@ def make_gaussian_weight_map(h, w, sigma_frac=0.22):
 def gt_index_image_to_foveated_colour_vector(gt_path, sigma_frac=0.22):
     gt = np.array(Image.open(gt_path))
 
-    # Handle either grayscale GTs: (H, W)
-    # or RGB index maps: (H, W, 3)
+    #handle either grayscale GTs: (H, W) or RGB index maps: (H, W, 3)
     if gt.ndim == 3:
         gt = gt[:, :, 0]
 
@@ -82,33 +75,6 @@ def gt_index_image_to_foveated_colour_vector(gt_path, sigma_frac=0.22):
     colour_vector = colour_vector / (colour_vector.sum() + 1e-8)
 
     return colour_vector
-
-
-# def gt_index_image_to_object_colour_vector(gt_path):
-#     gt = np.array(Image.open(gt_path))
-
-#     if gt.ndim == 3:
-#         gt = gt[:, :, 0]
-
-#     counts = np.bincount(gt.flatten(), minlength=N_COLOURS).astype(np.float32)
-
-#     # Treat the largest area colour as background
-#     bg_idx = counts.argmax()
-#     counts[bg_idx] = 0
-
-#     if counts.sum() == 0:
-#         # fallback for uniform-colour images
-#         counts[bg_idx] = 1.0
-
-#     return counts / counts.sum()
-
-
-# def gt_index_image_to_combined_colour_vector(gt_path, sigma_frac=0.22, alpha=0.5):
-#     object_vec = gt_index_image_to_object_colour_vector(gt_path)
-#     foveated_vec = gt_index_image_to_foveated_colour_vector(gt_path, sigma_frac=sigma_frac)
-
-#     vec = alpha * object_vec + (1 - alpha) * foveated_vec
-#     return vec / (vec.sum() + 1e-8)
 
 
 def gt_index_image_to_object_equal_bg_vector(gt_path, background_weight=0.3, object_weight=0.7,):
@@ -133,7 +99,7 @@ def gt_index_image_to_object_equal_bg_vector(gt_path, background_weight=0.3, obj
         for idx in object_indices:
             vec[idx] = per_object
     else:
-        # fallback for uniform images
+        #fallback for uniform images
         vec[bg_idx] = 1.0
 
     return vec
@@ -155,17 +121,10 @@ def build_colour_vectors(stimuli):
             if not gt_path.exists():
                 raise FileNotFoundError(f"Missing GT: {gt_path}")
 
-            if (
-                "/03_colours/" in stim
-                or "/04_colours/" in stim
-                or "/05_colours/" in stim
-            ):
+            if ("/03_colours/" in stim or "/04_colours/" in stim or "/05_colours/" in stim):
                 cache[stim] = gt_index_image_to_object_equal_bg_vector(gt_path)
             else:
-                cache[stim] = gt_index_image_to_foveated_colour_vector(
-                    gt_path,
-                    sigma_frac=0.22
-                )
+                cache[stim] = gt_index_image_to_foveated_colour_vector(gt_path,sigma_frac=0.22)
 
         vectors.append(cache[stim])
 
@@ -173,13 +132,9 @@ def build_colour_vectors(stimuli):
 
 
 #train test vectors
-colour_gt_train = build_colour_vectors(
-    pilot_data["train"]["stimuli"]
-)
+colour_gt_train = build_colour_vectors(pilot_data["train"]["stimuli"])
 
-colour_gt_test = build_colour_vectors(
-    pilot_data["test"]["stimuli"]
-)
+colour_gt_test = build_colour_vectors(pilot_data["test"]["stimuli"])
 
 
 #validate
