@@ -253,7 +253,6 @@ data/
 
 #other
 README.md
-requirements.txt
 MultimodalEEGCOlourDecoding.ipynb
 chance_f1_results/
 assets/
