@@ -265,6 +265,8 @@ data_shape.py
 time_series.py
 test2.py
 svm_colour_baseline.py
+baseline_f1.py
+
 # colour_vector_check.py
 colour_vectors.py
 check_order.py
