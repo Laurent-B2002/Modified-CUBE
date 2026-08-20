@@ -1,61 +1,14 @@
 import torch
 import json
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.special import softmax
+from scipy.special import softmax, expit
 from scipy.stats import pearsonr, spearmanr
-
-# for split in ["train", "test"]:
-#     f = torch.load(f"pilot/features/{split}.pt", weights_only=False)
-
-#     print(split)
-#     print(f.keys())
-#     print("image features:", len(f["img_features"]))
-#     print("text features:", len(f["text_features"]))
-
-#     first_img = list(f["img_features"].keys())[0]
-#     first_text = list(f["text_features"].keys())[0]
-
-#     print("first image key:", first_img)
-#     print("image feature shape:", f["img_features"][first_img].shape)
-#     print("first text key:", first_text)
-#     print("text feature shape:", f["text_features"][first_text].shape)
+from PIL import Image
 
 
-#for sigmoid
-# run_dir = "exp_colour_pilot/pilot_tuning_fix1/sub-01_seed0"
-
-# with open(f"{run_dir}/test_results.json") as f:
-#     results = json.load(f)
-
-# print(results)
-
-# pred_colour = np.load(f"{run_dir}/test_outs_colour.npy")
-# gt_colour = np.load("pilot/splits/colour_val.npy")
-
-# print("pred:", pred_colour.shape, pred_colour.min(), pred_colour.max())
-# print("gt:", gt_colour.shape, gt_colour.min(), gt_colour.max())
-
-# print("First prediction:", pred_colour[0])
-# print("First GT:", gt_colour[0])
-
-# names = ["Red","Green","Blue","Yellow","Purple","Brown","Pink",
-#          "Orange","Turquoise","Beige","White","Black","Gray"]
-
-# for i in range(5):
-#     plt.figure(figsize=(10,3))
-#     plt.bar(np.arange(13)-0.2, gt_colour[i], width=0.4, label="GT")
-#     plt.bar(np.arange(13)+0.2, 1/(1+np.exp(-pred_colour[i])), width=0.4, label="Prediction")
-#     plt.xticks(range(13), names, rotation=45)
-#     plt.ylim(0,1)
-#     plt.legend()
-#     plt.title(f"Validation sample {i}")
-#     plt.tight_layout()
-#     plt.show()
-
-
-#for softmax
-run_dir = "exp_colour_pilot/pilot_tiny_overfit5/sub-01_seed0"
+run_dir = "exp_colour_pilot_whiten_foveated/pilot2_final/sub-01_seed0"
 
 pred_logits = np.load(f"{run_dir}/test_outs_colour.npy")
 gt = np.load(f"{run_dir}/test_outs_colour_gt.npy")
@@ -63,7 +16,16 @@ gt = np.load(f"{run_dir}/test_outs_colour_gt.npy")
 print("pred:", pred_logits.shape, pred_logits.min(), pred_logits.max())
 print("gt:", gt.shape, gt.min(), gt.max())
 
-pred = softmax(pred_logits, axis=1)
+# BCE
+pred = expit(pred_logits)
+pred = pred / np.clip(pred.sum(axis=1, keepdims=True), 1e-8, None)
+
+# KLDiv
+# pred = softmax(pred_logits, axis=1,)
+
+print("\nPrediction probability range:")
+print("minimum:", pred.min())
+print("maximum:", pred.max())
 
 print("Mean prediction:")
 print(np.round(pred.mean(axis=0), 4))
@@ -77,22 +39,146 @@ COLOUR_NAMES = [
     "White", "Black", "Gray"
 ]
 
-for i in range(3):
-    pred_prob = softmax(pred_logits[i])
+stim_root = Path("pilot2_whiten_foveated/stimuli")
 
-    plt.figure(figsize=(10, 3))
-    x = np.arange(13)
+test_data = torch.load(
+    "pilot2_whiten_foveated/cube_ready/sub-01/val.pt",
+    weights_only=False
+)
 
-    plt.bar(x - 0.2, gt[i], width=0.4, label="GT")
-    plt.bar(x + 0.2, pred_prob, width=0.4, label="Prediction")
+test_imgs = np.array([str(x) for x in test_data["img"].flatten()])
 
-    plt.xticks(x, COLOUR_NAMES, rotation=45, ha="right")
-    plt.ylim(0, 1)
-    plt.ylabel("Probability")
-    plt.title(f"Validation sample {i}")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+STIM_TYPES = [
+    "03_colours",
+    "04_colours",
+    "05_colours",
+    "random_chars",
+    "train_language",
+    "uniform_colour",
+    "uniform_fg_bg_geometrical",
+    "uniform_fg_bg_objects",
+]
+
+# keep only types that are actually present in test set
+selected_indices = []
+selected_types = []
+
+for stim_type in STIM_TYPES:
+    matches = [
+        i for i, p in enumerate(test_imgs)
+        if p.strip("/").startswith(stim_type + "/")
+    ]
+
+    if len(matches) == 0:
+        print(f"No test samples found for: {stim_type}")
+        continue
+
+    selected_indices.append(matches[0])
+    selected_types.append(stim_type)
+
+n = len(selected_indices)
+x = np.arange(len(COLOUR_NAMES))
+
+fig, axes = plt.subplots(
+    nrows=n,
+    ncols=2,
+    figsize=(15, 3 * n),
+    gridspec_kw={"width_ratios": [1, 4]}
+)
+
+if n == 1:
+    axes = np.array([axes])
+
+for row, idx in enumerate(selected_indices):
+    stim_path = test_imgs[idx]
+    img_path = stim_root / stim_path.lstrip("/")
+
+    img = Image.open(img_path).convert("RGB")
+
+    axes[row, 0].imshow(img)
+    axes[row, 0].axis("off")
+    axes[row, 0].set_title(selected_types[row])
+
+    axes[row, 1].bar(x - 0.2, gt[idx], width=0.4, label="GT")
+    axes[row, 1].bar(x + 0.2, pred[idx], width=0.4, label="Prediction")
+
+    axes[row, 1].set_ylim(0, 1)
+    axes[row, 1].set_ylabel("Probability")
+    axes[row, 1].set_xticks(x)
+    axes[row, 1].set_xticklabels(COLOUR_NAMES, rotation=45, ha="right")
+    # axes[row, 1].set_title(stim_path)
+
+    if row == 0:
+        axes[row, 1].legend()
+
+plt.tight_layout()
+plt.show()
+
+#histogram for colour frequencies in train set
+# train_data = torch.load(
+#     "pilot_whiten/cube_ready/sub-01/train.pt",
+#     weights_only=False
+# )
+
+# stimuli = train_data["img"].flatten()
+
+# gt_root = Path("pilot_whiten/gts")
+
+# colour_counts = np.zeros(13, dtype=np.int64)
+
+# for stim in stimuli:
+#     gt_path = gt_root / str(stim).lstrip("/")
+
+#     gt_img = np.array(Image.open(gt_path))
+
+#     # GT saved as RGB index map
+#     indices = gt_img
+
+#     gt_img = np.array(Image.open(gt_path))
+
+#     # Handle both grayscale index maps and RGB index maps
+#     if gt_img.ndim == 2:
+#         indices = gt_img
+#     else:
+#         indices = gt_img[:, :, 0]
+
+#     counts = np.bincount(indices.flatten(), minlength=13)
+#     colour_counts += counts
+
+# colour_freq = colour_counts / colour_counts.sum()
+
+# print("Pixel counts:")
+# for name, count in zip(COLOUR_NAMES, colour_counts):
+#     print(f"{name:10s}: {count}")
+
+# plt.figure(figsize=(10, 5))
+# plt.bar(COLOUR_NAMES, colour_freq)
+
+# plt.ylabel("Fraction of training pixels")
+# plt.title("Colour distribution in training GTs")
+# plt.xticks(rotation=45, ha="right")
+
+# plt.tight_layout()
+# plt.show()
+
+
+#colour distribution in train set
+# colour_dict = np.load(
+#     "pilot2/colour_annotations/train.npy",
+#     allow_pickle=True
+# ).item()
+
+# colour_vectors = np.stack(list(colour_dict.values())).astype(np.float32)
+
+# mean_distribution = colour_vectors.mean(axis=0)
+
+# plt.figure(figsize=(10, 5))
+# plt.bar(COLOUR_NAMES, mean_distribution)
+# plt.ylabel("Average target probability")
+# plt.title("Average colour distribution in training annotations")
+# plt.xticks(rotation=45, ha="right")
+# plt.tight_layout()
+# plt.show()
 
 
 top1_pred = pred.argmax(axis=1)
@@ -100,15 +186,39 @@ top1_gt = gt.argmax(axis=1)
 
 print("Top-1 colour accuracy:", (top1_pred == top1_gt).mean())
 
-pearsons = []
-spearmans = []
+# pearsons = []
+# spearmans = []
 
-for p, g in zip(pred, gt):
-    pearsons.append(pearsonr(p, g)[0])
-    spearmans.append(spearmanr(p, g)[0])
+# for p, g in zip(pred, gt):
+#     pearsons.append(pearsonr(p, g)[0])
+#     spearmans.append(spearmanr(p, g)[0])
 
-print("Mean Pearson:", np.nanmean(pearsons))
-print("Mean Spearman:", np.nanmean(spearmans))
+# print("Mean Pearson:", np.nanmean(pearsons))
+# print("Mean Spearman:", np.nanmean(spearmans))
 
 print("Prediction mean:", pred.mean(axis=0))
 print("GT mean:", gt.mean(axis=0))
+
+pred_thresh = 0.10
+gt_thresh = 0.001
+
+pred_binary = pred >= pred_thresh
+gt_binary = gt >= gt_thresh
+
+print(
+    "\nFraction of samples with any predicted "
+    f"colour >= {pred_thresh}:",
+    pred_binary.any(axis=1).mean(),
+)
+
+print(
+    "Mean number of predicted colours "
+    f">= {pred_thresh}:",
+    pred_binary.sum(axis=1).mean(),
+)
+
+print(
+    "Mean number of GT colours "
+    f">= {gt_thresh}:",
+    gt_binary.sum(axis=1).mean(),
+)

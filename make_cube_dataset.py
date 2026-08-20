@@ -3,9 +3,9 @@ import numpy as np
 import torch
 
 
-SPLIT_DIR = Path("pilot/splits")
-OUT_DIR = Path("pilot/cube_ready/sub-01")
-COLOUR_DIR = Path("pilot/colour_annotations")
+SPLIT_DIR = Path("pilot2_whiten_foveated/splits")
+OUT_DIR = Path("pilot2_whiten_foveated/cube_ready/sub-01")
+COLOUR_DIR = Path("pilot2_whiten_foveated/colour_annotations")
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 COLOUR_DIR.mkdir(parents=True, exist_ok=True)
@@ -85,7 +85,7 @@ stimuli_train = np.load(SPLIT_DIR / "stimuli_train.npy", allow_pickle=True)
 stimuli_val = np.load(SPLIT_DIR / "stimuli_val.npy", allow_pickle=True)
 
 #use original pilot train times
-raw_train = np.load("pilot/raw/eeg_train_float16.npy", allow_pickle=True)[()]
+raw_train = np.load("pilot_whiten_foveated/raw/eeg_train_float16.npy", allow_pickle=True)[()]
 times = raw_train["times"]
 
 
@@ -143,7 +143,7 @@ print("\nFirst train img:", first_img)
 print("First colour vector:", colour_train_dict[first_img])
 print("Colour vector shape:", colour_train_dict[first_img].shape)
 
-x = torch.load("pilot/cube_ready/sub-01/train.pt", weights_only=False)
+x = torch.load("pilot_whiten_foveated/cube_ready/sub-01/train.pt", weights_only=False)
 
 for k, v in x.items():
     try:

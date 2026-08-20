@@ -193,3 +193,104 @@ class TSconv(BaseModel):
             nn.ELU(),
             nn.Dropout(0.5),
         )
+
+
+class EEGConvProjectLayerColour(nn.Module):
+    def __init__(
+        self,
+        z_dim,
+        c_num,
+        timesteps,
+        drop_proj=0.3,
+        f1=16,
+        f2=32,
+        f3=64,
+        k1=25,
+        k2=15,
+        colour_hidden_dims=(512, 256),
+    ):
+        super().__init__()
+
+        self.z_dim = z_dim
+        self.c_num = c_num
+        self.timesteps = timesteps
+
+        self.f1 = f1
+        self.f2 = f2
+        self.f3 = f3
+
+        # Required because the convolutions below are grouped.
+        if f2 % f1 != 0:
+            raise ValueError(
+                f"f2 ({f2}) must be divisible by f1 ({f1})"
+            )
+
+        if f3 % f2 != 0:
+            raise ValueError(
+                f"f3 ({f3}) must be divisible by f2 ({f2})"
+            )
+
+        self.encoder = nn.Sequential(
+
+
+            # 1. Temporal feature extraction
+            nn.Conv2d(in_channels=1, out_channels=f1, kernel_size=(1, k1), padding=(0, 12), bias=False),
+            nn.BatchNorm2d(f1),
+
+            # 2. Spatial filtering across all EEG channels
+            nn.Conv2d(in_channels=f1, out_channels=f2, kernel_size=(c_num, 1), groups=f1, bias=False),
+
+            nn.BatchNorm2d(f2),
+            nn.ELU(),
+
+            nn.AvgPool2d(kernel_size=(1, 4), stride=(1, 4)),
+            nn.Dropout(drop_proj),
+
+            # 3. Additional temporal feature extraction
+            nn.Conv2d(in_channels=f2, out_channels=f3, kernel_size=(1, k2), padding=(0, 7), groups=f2, bias=False),
+
+            nn.Conv2d(in_channels=f3, out_channels=f3, kernel_size=(1, 1), bias=False),
+
+            nn.BatchNorm2d(f3),
+            nn.ELU(),
+
+            nn.AvgPool2d(kernel_size=(1, 4), stride=(1, 4)),
+
+            nn.Dropout(drop_proj),
+
+            nn.AdaptiveAvgPool2d((1, 8)),
+        )
+
+        # Encoder output:
+        # (batch, f3, 1, 8)
+        self.projection = nn.Sequential(nn.Flatten(), nn.Linear(f3 * 8, z_dim,), nn.GELU(), nn.Dropout(drop_proj), nn.LayerNorm(z_dim),)
+
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+
+        self.softplus = nn.Softplus()
+
+        self.colour_head = ColorHead(input_dim=z_dim, hidden_dims=colour_hidden_dims)
+
+    def forward(self, x):
+
+        if x.ndim != 3:
+            raise ValueError(
+                "Expected EEG input with shape "
+                f"(batch, channels, time), got {x.shape}"
+            )
+
+        if x.shape[1] != self.c_num:
+            raise ValueError(
+                f"Expected {self.c_num} EEG channels, "
+                f"but received {x.shape[1]}"
+            )
+
+        x = x.unsqueeze(1)
+
+        x = self.encoder(x)
+        x = self.projection(x)
+
+        x_colour = self.colour_head(x)
+
+        return x, x_colour
+

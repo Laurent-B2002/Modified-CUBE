@@ -9,23 +9,32 @@ models:
   brain:
     target: "base.eeg_backbone.${brain_backbone}"
     params:
-        c_num: 17 #63
+        c_num: 63 #17
         z_dim: ${z_dim}
         timesteps: ${timesteps}
+        drop_proj: 0.3
+        colour_hidden_dims: [256, 128]
+
+        f1: 16
+        f2: 32
+        f3: 64
+
+        k1: 25
+        k2: 15
 
 data:
-  data_dir: data/Preprocessed_data_250Hz_whiten/ #pilot/cube_ready/
-  selected_ch: ['P7', 'P5', 'P3', 'P1','Pz', 'P2', 'P4', 'P6', 'P8', 'PO7', 'PO3', 'POz', 'PO4', 'PO8','O1', 'Oz', 'O2'] #"None"
+  data_dir: pilot2_whiten_foveated/cube_ready/ #data/Preprocessed_data_250Hz_whiten/
+  selected_ch: "None" #['P7', 'P5', 'P3', 'P1','Pz', 'P2', 'P4', 'P6', 'P8', 'PO7', 'PO3', 'POz', 'PO4', 'PO8','O1', 'Oz', 'O2'] 
   model_type: 'REMOVE'
-  train_batch_size: 1024
+  train_batch_size: 64
   val_batch_size: 200
   test_batch_size: 200
-  uncertainty_aware: True #False
+  uncertainty_aware: False #True
   blur_type:
     target: base.utils.DirectT # base.inpainting_data.FoveaBlur 
     params:
-          #{}
-          blur_kernel_size: 51
+          {}
+          #blur_kernel_size: 51
           # h: 224
           # w: 224
           # blur_kernel_size: ${blur_kernel_size}

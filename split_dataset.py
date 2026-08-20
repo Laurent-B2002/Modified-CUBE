@@ -4,9 +4,9 @@ from sklearn.model_selection import train_test_split
 
 
 #paths
-RAW_DIR = Path("pilot/raw")
-COLOUR_VECTOR_DIR = Path("pilot/colour_vectors")
-SPLIT_DIR = Path("pilot/splits")
+RAW_DIR = Path("pilot2_whiten_foveated/raw")
+COLOUR_VECTOR_DIR = Path("pilot2_whiten_foveated/colour_vectors")
+SPLIT_DIR = Path("pilot2_whiten_foveated/splits")
 SPLIT_DIR.mkdir(parents=True, exist_ok=True)
 
 

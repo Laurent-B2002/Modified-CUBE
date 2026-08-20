@@ -4,9 +4,9 @@ from PIL import Image
 
 
 #paths
-RAW_DIR = Path("pilot/raw")
-GT_ROOT = Path("pilot/gts")
-OUT_DIR = Path("pilot/colour_vectors")
+RAW_DIR = Path("pilot_whiten/raw")
+GT_ROOT = Path("pilot_whiten/gts")
+OUT_DIR = Path("pilot_whiten/colour_vectors")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -9,9 +9,9 @@ from torchvision import transforms
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-CUBE_DATA_DIR = Path("pilot/cube_ready/sub-01")
-STIMULI_ROOT = Path("pilot/stimuli")
-FEATURE_DIR = Path("pilot/features")
+CUBE_DATA_DIR = Path("pilot2_whiten_foveated/cube_ready/sub-01")
+STIMULI_ROOT = Path("pilot2_whiten_foveated/stimuli")
+FEATURE_DIR = Path("pilot2_whiten_foveated/features")
 FEATURE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -66,21 +66,25 @@ def encode_images(img_keys, model, preprocess, batch_size=8):
 
 
 @torch.no_grad()
-def encode_texts(text_keys, model):
-    model.eval()
-
+def encode_texts(text_keys, model, batch_size=128):
+    device = next(model.parameters()).device
     text_features = {}
 
-    tokens = open_clip.tokenize([
-        f"This is a {text}."
-        for text in text_keys
-    ]).to(DEVICE)
+    for i in tqdm(range(0, len(text_keys), batch_size), desc="Encoding texts"):
+        batch_texts = text_keys[i:i + batch_size]
 
-    feats = model.encode_text(tokens)
-    feats = feats / feats.norm(dim=-1, keepdim=True)
+        tokens = open_clip.tokenize(
+            [f"This is a {t}." for t in batch_texts]
+        ).to(device)
 
-    for text, feat in zip(text_keys, feats):
-        text_features[text] = feat.detach().cpu().float()
+        feats = model.encode_text(tokens)
+        feats = feats / feats.norm(dim=-1, keepdim=True)
+
+        for key, feat in zip(batch_texts, feats):
+            text_features[key] = feat.float().cpu()
+
+        del tokens, feats
+        torch.cuda.empty_cache()
 
     return text_features
 

@@ -11,6 +11,7 @@ import json
 import pytorch_lightning as pl
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 from collections import Counter
 from scipy.stats import norm
 from scipy import stats
@@ -45,7 +46,7 @@ def get_z_dim(config):
         return f_tmp['img_features'][list(f_tmp['img_features'].keys())[0]].shape[0]
 
 
-def micro_f1_score(gt, pred_probs, gt_thresh=0.33, pred_thresh=0.33, eps=1e-8):
+def micro_f1_score(gt, pred_probs, gt_thresh=0.001, pred_thresh=0.10, eps=1e-8):
     # Binarise ground truth and predictions
     gt_binary = (gt >= gt_thresh).astype(int)
     pred_binary = (pred_probs >= pred_thresh).astype(int)
@@ -67,21 +68,39 @@ def compute_colour_metrics(outputs, targets, scale=True):
     pearson = []
     spearman = []
     f1s = []
-    outputs = 1 / (1 + torch.exp(-outputs))
+    # outputs = 1 / (1 + torch.exp(-outputs))
+    # outputs = torch.softmax(outputs, dim=1)
+    outputs = torch.sigmoid(outputs)
+    outputs = outputs / outputs.sum(dim=1, keepdim=True).clamp_min(1e-8)
     for p, t in zip(outputs, targets):
-        gt = t.cpu().numpy()
+        gt = t.detach().cpu().numpy()
         pred_raw = p.detach().cpu().numpy()
-        pred = pred_raw * (np.sum(gt) / np.sum(pred_raw)) if scale else pred_raw
+        pred = pred_raw # * (np.sum(gt) / np.sum(pred_raw)) if scale else pred_raw
         corr = stats.pearsonr(pred, gt)[0]
         pearson.append(corr)
         corr = stats.spearmanr(pred, gt)[0]
         spearman.append(corr)
-        f1s.append(micro_f1_score(gt, pred, 0.33, 0.33))
+        f1s.append(micro_f1_score(gt, pred, 0.001, 0.10))
+
+    if not torch.allclose(
+        outputs.sum(dim=1),
+        torch.ones(
+            outputs.shape[0],
+            device=outputs.device
+        ),
+        atol=1e-5
+    ):
+        raise ValueError(
+            "Normalized colour predictions do not sum to 1."
+        )
+    
     return {
         'pearson': np.mean(pearson),
         'spearman': np.mean(spearman),
         'f1': np.mean(f1s)
     }
+
+
 
 
 class PLModel(pl.LightningModule):
@@ -93,6 +112,8 @@ class PLModel(pl.LightningModule):
             setattr(self, f"{key}", value)
         self.criterion = ClipLoss()
         self.colour_criterion = nn.BCEWithLogitsLoss()
+        self.kl_criterion = nn.KLDivLoss(reduction="batchmean")
+        # self.colour_criterion = nn.MSELoss()
 
         self.all_predicted_classes = []
         self.all_true_labels = []
@@ -107,20 +128,33 @@ class PLModel(pl.LightningModule):
         self.mAP_total = 0
         self.match_similarities = []
 
+        self.train_colour_preds = []
+        self.train_colour_gts = []
+
         self.test_colour_preds = []
         self.test_colour_gts = []
+        self.test_object_preds = []
+
+        self.test_f1_values = []
+        self.test_pearson_values = []
+        self.test_spearman_values = []
 
     def forward(self, batch, sample_posterior=False):
 
         idx = batch['idx'].cpu().detach().numpy()
         eeg = batch['eeg']
-        colour_gt = batch['colour_gt']
+        #for BCE
+        colour_gt = batch['colour_gt'].float()
 
         img_z = batch['img_features']
 
         eeg_z, colour_z = self.brain(eeg)
 
-        if self.training:
+        if self.current_epoch == 0 and self.global_step == 0:
+            print("EEG entering model:", eeg.shape)
+
+        if (self.training and self.current_epoch == 0 and self.global_step == 0):
+            print("eeg shape:", eeg.shape)
             print("eeg std:", eeg.std().item())
             print("eeg_z std:", eeg_z.std().item())
             print("colour_z std:", colour_z.std().item())
@@ -156,17 +190,33 @@ class PLModel(pl.LightningModule):
             loss = total_loss
         else:
             loss = total_loss
-        #check things eeg
-        colour_loss = self.colour_criterion(colour_z, colour_gt)
-        colour_pred = torch.softmax(colour_z, dim=1)
-        colour_loss = self.colour_criterion(colour_pred, colour_gt)
+
+        # Primary loss: BCE
+        bce_loss = self.colour_criterion(colour_z, colour_gt)
+        pred_dist = torch.sigmoid(colour_z)
+
+        pred_dist = pred_dist / pred_dist.sum(dim=1, keepdim=True).clamp_min(1e-8)
+        gt_dist = colour_gt / colour_gt.sum(dim=1, keepdim=True).clamp_min(1e-8)
+
+        # Secondary loss: KLDiv
+        kl_loss = self.kl_criterion(torch.log(pred_dist.clamp_min(1e-8)), gt_dist)
+        lambda_kl = 0.1
+
+        #Secondary loss: cosine
+        # cosine_similarity = F.cosine_similarity(pred_dist, gt_dist, dim=1)
+        # cosine_loss = (1.0 - cosine_similarity).mean()
+        # lambda_cos = 0.125
+
+        colour_loss = (bce_loss + lambda_kl * kl_loss)
+
+
         colour_weight = 50.0
-        loss = loss + colour_weight * colour_loss # colour_loss 
-        return eeg_z, img_z, loss, colour_z, total_loss, colour_loss
+        loss = loss + colour_weight * colour_loss
+        return eeg_z, img_z, loss, colour_z, total_loss, colour_loss, bce_loss, kl_loss #cosine_loss
 
     def training_step(self, batch, batch_idx):
         batch_size = batch['idx'].shape[0]
-        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss = self(batch, sample_posterior=True)
+        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss, bce_loss, kl_loss = self(batch, sample_posterior=True) #cosine_loss
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True,
                  sync_dist=True, batch_size=batch_size)
@@ -189,6 +239,39 @@ class PLModel(pl.LightningModule):
             logger=True
         )
 
+        self.log(
+            "train_bce_loss",
+            bce_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        self.log(
+            "train_kl_loss",
+            kl_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        # self.log(
+        #     "train_cosine_loss",
+        #     cosine_loss,
+        #     on_step=False,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     sync_dist=True,
+        #     batch_size=batch_size,
+        # )
+
         eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
 
         similarity = (eeg_z @ img_z.T)
@@ -196,6 +279,14 @@ class PLModel(pl.LightningModule):
         self.all_predicted_classes.append(top_k_indices.cpu().numpy())
         label = torch.arange(0, batch_size).to(self.device)
         self.all_true_labels.extend(label.cpu().numpy())
+
+        self.train_colour_preds.append(
+            colour_z.detach().cpu()
+        )
+
+        self.train_colour_gts.append(
+            batch["colour_gt"].detach().cpu()
+        )
 
         if batch_idx == self.trainer.num_training_batches - 1:
             all_predicted_classes = np.concatenate(self.all_predicted_classes, axis=0)
@@ -205,13 +296,13 @@ class PLModel(pl.LightningModule):
             top_1_accuracy = sum(top_1_correct) / len(top_1_correct)
             top_k_correct = (all_predicted_classes == all_true_labels[:, np.newaxis]).any(axis=1)
             top_k_accuracy = sum(top_k_correct) / len(top_k_correct)
-            f1_colour = compute_colour_metrics(colour_z, batch['colour_gt'])['f1']
+            #f1_colour = compute_colour_metrics(colour_z, batch['colour_gt'])['f1']
             self.log('train_top1_acc', top_1_accuracy, on_step=False, on_epoch=True, prog_bar=True,
                      logger=True, sync_dist=True)
             self.log('train_top5_acc', top_k_accuracy, on_step=False, on_epoch=True, prog_bar=True,
                      logger=True, sync_dist=True)
-            self.log('train_f1', f1_colour, on_step=False, on_epoch=True, prog_bar=True,
-                     logger=True, sync_dist=True)
+            # self.log('train_f1', f1_colour, on_step=False, on_epoch=True, prog_bar=True,
+            #          logger=True, sync_dist=True)
             self.all_predicted_classes = []
             self.all_true_labels = []
 
@@ -224,10 +315,57 @@ class PLModel(pl.LightningModule):
             self.trainer.train_dataloader.dataset.match_label = self.match_label
         return loss
 
+    def on_train_epoch_end(self):
+        all_colour_preds = torch.cat(
+            self.train_colour_preds,
+            dim=0,
+        )
+
+        all_colour_gts = torch.cat(
+            self.train_colour_gts,
+            dim=0,
+        )
+
+        metrics = compute_colour_metrics(
+            all_colour_preds,
+            all_colour_gts,
+        )
+
+        self.log(
+            "train_f1",
+            metrics["f1"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "train_pearson",
+            metrics["pearson"],
+            on_step=False,
+            on_epoch=True,
+            logger=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "train_spearman",
+            metrics["spearman"],
+            on_step=False,
+            on_epoch=True,
+            logger=True,
+            sync_dist=True,
+        )
+
+        self.train_colour_preds = []
+        self.train_colour_gts = []
+
     def validation_step(self, batch, batch_idx):
         batch_size = batch['idx'].shape[0]
 
-        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss = self(batch)
+        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss, bce_loss, kl_loss = self(batch) #cosine_loss
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True,
                  sync_dist=True, batch_size=batch_size)
         self.log(
@@ -250,6 +388,69 @@ class PLModel(pl.LightningModule):
             batch_size=batch_size
         )
 
+        self.log(
+            "val_bce_loss",
+            bce_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            batch_size=batch_size,
+        )
+
+        self.log(
+            "val_kl_loss",
+            kl_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            batch_size=batch_size,
+        )
+
+        # self.log(
+        #     "val_cosine_loss",
+        #     cosine_loss,
+        #     on_step=False,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     batch_size=batch_size,
+        # )
+
+        ###
+        colour_metrics = compute_colour_metrics(colour_z, batch["colour_gt"])
+
+        self.log(
+            "val_f1_colour",
+            colour_metrics["f1"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            batch_size=batch_size
+        )
+
+        self.log(
+            "val_pearson",
+            colour_metrics["pearson"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            batch_size=batch_size
+        )
+
+        self.log(
+            "val_spearman",
+            colour_metrics["spearman"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            batch_size=batch_size
+        )
+        ###
         eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
 
         similarity = (eeg_z @ img_z.T)
@@ -275,13 +476,31 @@ class PLModel(pl.LightningModule):
         self.all_predicted_classes = []
         self.all_true_labels = []
 
+
+    def on_test_epoch_start(self):
+        self.all_predicted_classes = []
+        self.all_true_labels = []
+
+        self.test_colour_preds = []
+        self.test_colour_gts = []
+        self.test_object_preds = []
+
+        self.test_f1_values = []
+        self.test_pearson_values = []
+        self.test_spearman_values = []
+
+        self.match_similarities = []
+        self.mAP_total = 0
+
+
     def test_step(self, batch, batch_idx):
         batch_size = batch['idx'].shape[0]
-        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss = self(batch)
+        eeg_z, img_z, loss, colour_z, clip_loss, colour_loss, bce_loss, kl_loss = self(batch) #cosine_loss
         self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True,
                  sync_dist=True, batch_size=batch_size)
         eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
-        np.save(self.config['object_res_path'], eeg_z.detach().cpu().numpy())
+        self.test_object_preds.append(eeg_z.detach().cpu())
+        # np.save(self.config['object_res_path'], eeg_z.detach().cpu().numpy())
         # np.save(self.config['colour_res_path'], colour_z.detach().cpu().numpy())
         self.test_colour_preds.append(colour_z.detach().cpu())
         self.test_colour_gts.append(batch['colour_gt'].detach().cpu())
@@ -291,7 +510,11 @@ class PLModel(pl.LightningModule):
         self.all_predicted_classes.append(top_k_indices.cpu().numpy())
         label = torch.arange(0, batch_size).to(self.device)
         self.all_true_labels.extend(label.cpu().numpy())
-        self.f1_colour = compute_colour_metrics(colour_z, batch['colour_gt'])['f1']
+        colour_metrics = compute_colour_metrics(colour_z, batch["colour_gt"])
+
+        self.test_f1_values.append(colour_metrics["f1"])
+        self.test_pearson_values.append(colour_metrics["pearson"])
+        self.test_spearman_values.append(colour_metrics["spearman"])
 
         # compute sim and map
         self.match_similarities.extend(similarity.diag().detach().cpu().tolist())
@@ -312,42 +535,59 @@ class PLModel(pl.LightningModule):
 
         all_colour_preds = torch.cat(self.test_colour_preds, dim=0).numpy()
         all_colour_gts = torch.cat(self.test_colour_gts, dim=0).numpy()
+        all_object_preds = torch.cat(self.test_object_preds, dim=0,).numpy()
 
         top_1_predictions = all_predicted_classes[:, 0]
         top_1_correct = top_1_predictions == all_true_labels
         top_1_accuracy = sum(top_1_correct) / len(top_1_correct)
         top_k_correct = (all_predicted_classes == all_true_labels[:, np.newaxis]).any(axis=1)
         top_k_accuracy = sum(top_k_correct) / len(top_k_correct)
-
+        ###
+        test_f1_colour = float(np.mean(self.test_f1_values))
+        test_pearson = float(np.mean(self.test_pearson_values))
+        test_spearman = float(np.mean(self.test_spearman_values))
+        ###
         self.mAP = (self.mAP_total / len(all_true_labels)).item()
-        self.match_similarities = np.mean(self.match_similarities) if self.match_similarities else 0
+        mean_similarity = (
+            float(np.mean(self.match_similarities))
+            if len(self.match_similarities) > 0
+            else 0.0
+        )
 
         self.log('test_top1_acc', top_1_accuracy, sync_dist=True)
         self.log('test_top5_acc', top_k_accuracy, sync_dist=True)
-        self.log('test_f1_colour', self.f1_colour, sync_dist=True)
+        ###
+        self.log("test_f1_colour", test_f1_colour, sync_dist=True)
+        self.log("test_pearson", test_pearson, sync_dist=True)
+        self.log("test_spearman", test_spearman, sync_dist=True)
+        ###
         self.log('mAP', self.mAP, sync_dist=True)
-        self.log('similarity', self.match_similarities, sync_dist=True)
+        self.log('similarity', mean_similarity, sync_dist=True)
 
         np.save(self.config['colour_res_path'], all_colour_preds)
-        np.save(
-            self.config['colour_res_path'].replace(".npy", "_gt.npy"),
-            all_colour_gts
-)
+        np.save(self.config['colour_res_path'].replace(".npy", "_gt.npy"), all_colour_gts)
+        np.save(self.config["object_res_path"], all_object_preds,)
 
         self.all_predicted_classes = []
         self.all_true_labels = []
 
         self.test_colour_preds = []
         self.test_colour_gts = []
-
+        ###
+        self.test_f1_values = []
+        self.test_pearson_values = []
+        self.test_spearman_values = []
+        ###
         avg_test_loss = self.trainer.callback_metrics['test_loss']
         return {
             'test_loss': avg_test_loss.item(),
             'test_top1_acc': top_1_accuracy.item(),
             'test_top5_acc': top_k_accuracy.item(),
-            'test_f1_colour': self.f1_colour,
+            'test_f1_colour': test_f1_colour,
+            'test_pearson': test_pearson,
+            'test_spearman': test_spearman,
             'mAP': self.mAP,
-            'similarity': self.match_similarities
+            'similarity': mean_similarity
         }
 
     def configure_optimizers(self):
@@ -475,7 +715,7 @@ def main():
     config['data']['subjects'] = [opt.subjects]
     if opt.all_chs:
         config['data']['selected_ch'] = None
-        config['models']['brain']['params']['c_num'] = 63
+        config['models']['brain']['params']['c_num'] = 64
 
     seed_str = f"_seed{config['seed']}"
     leison_str = '' if opt.leison_time is None else f"_leison_{opt.leison_time:04d}"
@@ -512,21 +752,34 @@ def main():
     )
     pl_model = load_model(config, train_loader)
 
-    checkpoint_callback = ModelCheckpoint(save_last=True)
+    best_loss_checkpoint = ModelCheckpoint(
+        monitor="val_colour_loss",
+        mode="min",
+        save_top_k=1,
+        save_last=True,
+        filename="best-{epoch:02d}-{val_colour_loss:.6f}",
+    )
+
+    best_f1_checkpoint = ModelCheckpoint(
+        monitor="val_f1_colour",
+        mode="max",
+        save_top_k=1,
+        filename="best-f1-{epoch:02d}-{val_f1_colour:.6f}",
+    )
 
     early_stop_callback = EarlyStopping(
-        monitor='train_loss',
-        min_delta=0.001,
-        patience=5,
-        verbose=False,
-        mode='min'
+        monitor="val_f1_colour",
+        mode="max",
+        min_delta=0.0001,
+        patience=4,
+        verbose=True,
     )
 
     device = get_device('auto')
     trainer = Trainer(
         log_every_n_steps=10, 
         strategy = "auto", #strategy=DDPStrategy(find_unused_parameters=False),
-        callbacks=[checkpoint_callback],#,early_stop_callback],
+        callbacks=[best_f1_checkpoint, best_loss_checkpoint],
         max_epochs=config['train']['epoch'],
         devices=1, #[device], 
         accelerator='cuda',
@@ -534,11 +787,12 @@ def main():
     )
 
     trainer.fit(
-        pl_model, ckpt_path='last',
-        train_dataloaders=train_loader, val_dataloaders=val_loader
+        pl_model,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
     )
 
-    test_results = trainer.test(ckpt_path='last', dataloaders=test_loader)
+    test_results = trainer.test(ckpt_path=best_f1_checkpoint.best_model_path, dataloaders=test_loader)
 
     with open(os.path.join(test_out_dir, f'test_results{leison_str}.json'), 'w') as f:
         json.dump(test_results, f, indent=4)

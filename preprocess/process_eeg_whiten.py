@@ -17,7 +17,7 @@ args = get_args_parser()
 
 sub = args.subject
 
-n_ses = 4
+n_ses = 2
 
 seed = 20200220
 re_sfreq = 250

@@ -237,13 +237,53 @@ LICENSE
 
 #results
 exp_colour_pilot/
+exp_colour_pilot_whiten/
+exp_colour_pilot_whiten_foveated/
+exp_colour_pilot2/
 exp_colour_original_check/
 
 #data
 pilot/
+pilot_whiten/
+pilot_whiten_foveated/
+pilot_whiten_foveatedv2/
+pilot2/
+pilot2_whiten_foveated/
 data/
 
 #other
 README.md
 requirements.txt
 MultimodalEEGCOlourDecoding.ipynb
+chance_f1_results/
+assets/
+configs/meg.yaml
+
+#code for verifications
+stimuli_images.py
+data_shape.py
+time_series.py
+test2.py
+svm_colour_baseline.py
+colour_vector_check.py
+colour_vectors.py
+check_order.py
+actual_values.py
+fft_freq.py
+
+
+#visuals
+ztest_language_softmax_participant2.png
+ztest_language_softmax_participant1.png
+z_cnn_img.py
+visible_gt.py
+violin_plot.py
+validation_f1_violin_plot.png
+validation_f1_by_stimulus_type.png
+test_result_heatmap.py
+test_language_ground_truth_heatmap.png
+test_language_predictions_participant2.png
+test_language_predictions_participant1.png
+stimuli_f1.py
+cnn_architecture_compact.png
+gt_example.png

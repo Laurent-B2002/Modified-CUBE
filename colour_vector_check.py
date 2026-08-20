@@ -29,20 +29,20 @@ bar_colours = np.array(COLOUR_RGB) / 255
 
 
 colour_train = np.load(
-    "pilot/splits/colour_train.npy"
+    "pilot2/splits/colour_train.npy"
 )
 
 stimuli_train = np.load(
-    "pilot/splits/stimuli_train.npy",
+    "pilot2/splits/stimuli_train.npy",
     allow_pickle=True
 )
 
 eeg_train = np.load(
-    "pilot/splits/eeg_train.npy",
+    "pilot2/splits/eeg_train.npy",
     allow_pickle=True
 )
 
-stim_root = Path("pilot/stimuli")
+stim_root = Path("pilot2/stimuli")
 
 n_examples = 10
 
